@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { Calendar, Pencil, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -16,13 +16,32 @@ interface TaskItemProps {
 }
 
 export function TaskItem({ task, onUpdate, onDelete, onEdit }: TaskItemProps) {
-  const [isHovered, setIsHovered] = useState(false);
-
-  const priorityColors = {
-    LOW: "bg-blue-100 text-blue-800 border-blue-200",
-    MEDIUM: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    HIGH: "bg-red-100 text-red-800 border-red-200",
+  const priorityStyles: Record<Task["priority"], string> = {
+    LOW: "border-blue-200 bg-blue-50 text-blue-700",
+    MEDIUM: "border-amber-200 bg-amber-50 text-amber-800",
+    HIGH: "border-red-200 bg-red-50 text-red-700",
   };
+
+  const dueDate = task.due_date ? new Date(task.due_date) : null;
+
+  const [now, setNow] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const isOverdue =
+    !!dueDate &&
+    now !== null &&
+    !task.completed &&
+    dueDate.getTime() < now - 24 * 60 * 60 * 1000;
+  const isDueSoon =
+    !!dueDate &&
+    now !== null &&
+    !task.completed &&
+    !isOverdue &&
+    dueDate.getTime() < now + 48 * 60 * 60 * 1000;
 
   const handleCheckboxChange = (checked: boolean) => {
     onUpdate(task.id, { completed: checked });
@@ -31,24 +50,22 @@ export function TaskItem({ task, onUpdate, onDelete, onEdit }: TaskItemProps) {
   return (
     <Card
       className={cn(
-        "p-4 transition-all duration-200",
-        isHovered && "shadow-md",
-        task.completed && "opacity-60",
+        "group relative overflow-hidden border bg-card p-4 transition-colors hover:bg-muted/30 focus-within:ring-2 focus-within:ring-ring",
+        task.completed && "opacity-70",
       )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
       <div className="flex items-start gap-3">
-        <Checkbox
-          checked={task.completed}
-          onCheckedChange={handleCheckboxChange}
-          className="mt-1"
-        />
+        <div className="pt-0.5">
+          <Checkbox
+            checked={task.completed}
+            onCheckedChange={handleCheckboxChange}
+          />
+        </div>
 
-        <div className="flex-1 space-y-1">
+        <div className="min-w-0 flex-1 space-y-1">
           <h3
             className={cn(
-              "font-medium text-base",
+              "truncate font-medium text-base",
               task.completed && "line-through text-muted-foreground",
             )}
           >
@@ -62,17 +79,26 @@ export function TaskItem({ task, onUpdate, onDelete, onEdit }: TaskItemProps) {
           <div className="flex items-center gap-2 flex-wrap">
             <span
               className={cn(
-                "text-xs px-2 py-1 rounded-md border",
-                priorityColors[task.priority],
+                "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+                priorityStyles[task.priority],
               )}
             >
               {task.priority}
             </span>
 
-            {task.due_date && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            {dueDate && (
+              <div
+                className={cn(
+                  "flex items-center gap-1 text-xs",
+                  isOverdue
+                    ? "text-destructive"
+                    : isDueSoon
+                      ? "text-amber-700"
+                      : "text-muted-foreground",
+                )}
+              >
                 <Calendar className="h-3 w-3" />
-                <span>{format(new Date(task.due_date), "MMM dd, yyyy")}</span>
+                <span>{format(dueDate, "MMM dd, yyyy")}</span>
               </div>
             )}
           </div>
@@ -83,7 +109,8 @@ export function TaskItem({ task, onUpdate, onDelete, onEdit }: TaskItemProps) {
             variant="ghost"
             size="icon"
             onClick={() => onEdit(task)}
-            className={cn("transition-opacity", !isHovered && "opacity-0")}
+            aria-label="Edit task"
+            className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
           >
             <Pencil className="h-4 w-4" />
           </Button>
@@ -91,10 +118,8 @@ export function TaskItem({ task, onUpdate, onDelete, onEdit }: TaskItemProps) {
             variant="ghost"
             size="icon"
             onClick={() => onDelete(task.id)}
-            className={cn(
-              "transition-opacity text-destructive hover:text-destructive",
-              !isHovered && "opacity-0",
-            )}
+            aria-label="Delete task"
+            className="opacity-0 transition-opacity text-destructive hover:text-destructive group-hover:opacity-100 group-focus-within:opacity-100"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
