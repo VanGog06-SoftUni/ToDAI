@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 
 import type { Task, CreateTaskDTO, UpdateTaskDTO } from "@/lib/types";
 interface TaskDialogProps {
@@ -83,13 +84,15 @@ export function TaskDialog({
 
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
-              <Input
+              <Textarea
                 id="description"
                 value={formData.description}
                 onChange={(e) =>
                   setFormData({ ...formData, description: e.target.value })
                 }
                 placeholder="Add details about your task"
+                className="resize-none"
+                rows={3}
               />
             </div>
 
