@@ -33,7 +33,7 @@ export function useTasks() {
       id: tempId,
       ...taskData,
       description: taskData.description || null,
-      due_date: taskData.due_date || null,
+      due_date: taskData.due_date,
       priority: taskData.priority || "MEDIUM",
       completed: taskData.completed || false,
       created_at: new Date().toISOString(),
@@ -59,6 +59,8 @@ export function useTasks() {
         description:
           error instanceof ApiError ? error.message : "Failed to create task",
       });
+
+      throw error;
     }
   };
 
@@ -89,6 +91,8 @@ export function useTasks() {
         description:
           error instanceof ApiError ? error.message : "Failed to update task",
       });
+
+      throw error;
     }
   };
 

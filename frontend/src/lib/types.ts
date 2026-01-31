@@ -2,7 +2,7 @@ export interface Task {
   id: number;
   title: string;
   description: string | null;
-  due_date: string | null;
+  due_date: string;
   priority: "LOW" | "MEDIUM" | "HIGH";
   completed: boolean;
   created_at: string;
@@ -12,7 +12,7 @@ export interface Task {
 export interface CreateTaskDTO {
   title: string;
   description?: string;
-  due_date?: string;
+  due_date: string;
   priority?: "LOW" | "MEDIUM" | "HIGH";
   completed?: boolean;
 }

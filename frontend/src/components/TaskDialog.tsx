@@ -1,3 +1,4 @@
+import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -10,12 +11,41 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { ApiError } from '@/lib/api';
+
+import type { FormEvent } from "react";
 
 import type { Task, CreateTaskDTO, UpdateTaskDTO } from "@/lib/types";
+
+type FieldErrors = Partial<Record<"title" | "due_date", string>>;
+
+function getFieldErrorsFromPayload(payload: unknown): FieldErrors | null {
+  if (!payload || typeof payload !== "object") return null;
+  if (!("fieldErrors" in payload)) return null;
+
+  const fieldErrors = (payload as { fieldErrors?: unknown }).fieldErrors;
+  if (!fieldErrors || typeof fieldErrors !== "object") return null;
+
+  const candidate = fieldErrors as Partial<Record<string, unknown>>;
+  const result: FieldErrors = {};
+  if (typeof candidate.title === "string") result.title = candidate.title;
+  if (typeof candidate.due_date === "string")
+    result.due_date = candidate.due_date;
+  return Object.keys(result).length ? result : null;
+}
+
+function getTodayIsoLocal(): string {
+  const now = new Date();
+  const yyyy = String(now.getFullYear());
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 interface TaskDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: CreateTaskDTO | UpdateTaskDTO) => void;
+  onSubmit: (data: CreateTaskDTO | UpdateTaskDTO) => Promise<void>;
   task?: Task | null;
 }
 
@@ -33,7 +63,14 @@ export function TaskDialog({
     completed: false,
   });
 
+  const [todayIso, setTodayIso] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
+
   useEffect(() => {
+    setTodayIso(getTodayIsoLocal());
+
     if (task) {
       setFormData({
         title: task.title,
@@ -51,13 +88,61 @@ export function TaskDialog({
         completed: false,
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    setFieldErrors({});
+    setFormError(null);
+    setIsSubmitting(false);
   }, [task, open]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const validate = (): FieldErrors => {
+    const errors: FieldErrors = {};
+
+    if (!formData.title.trim()) {
+      errors.title = "Title is required";
+    }
+
+    if (!formData.due_date) {
+      errors.due_date = "Due date is required";
+    } else {
+      const minIso = todayIso || getTodayIsoLocal();
+      if (formData.due_date < minIso) {
+        errors.due_date = "Due date cannot be in the past";
+      }
+    }
+
+    return errors;
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
-    onOpenChange(false);
+
+    setFormError(null);
+    const clientErrors = validate();
+    setFieldErrors(clientErrors);
+    if (Object.keys(clientErrors).length > 0) return;
+
+    setIsSubmitting(true);
+    try {
+      await onSubmit({
+        ...formData,
+        title: formData.title.trim(),
+      });
+
+      onOpenChange(false);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        const maybeFieldErrors = getFieldErrorsFromPayload(error.payload);
+        if (maybeFieldErrors) {
+          setFieldErrors(maybeFieldErrors);
+        } else {
+          setFormError(error.message);
+        }
+      } else {
+        setFormError("Failed to save task");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -67,6 +152,10 @@ export function TaskDialog({
           <DialogHeader>
             <DialogTitle>{task ? "Edit Task" : "Create New Task"}</DialogTitle>
           </DialogHeader>
+
+          {formError ? (
+            <p className="text-sm text-destructive">{formError}</p>
+          ) : null}
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -79,7 +168,12 @@ export function TaskDialog({
                 }
                 placeholder="Enter task title"
                 required
+                disabled={isSubmitting}
+                aria-invalid={!!fieldErrors.title}
               />
+              {fieldErrors.title ? (
+                <p className="text-sm text-destructive">{fieldErrors.title}</p>
+              ) : null}
             </div>
 
             <div className="grid gap-2">
@@ -93,6 +187,7 @@ export function TaskDialog({
                 placeholder="Add details about your task"
                 className="resize-none"
                 rows={3}
+                disabled={isSubmitting}
               />
             </div>
 
@@ -104,6 +199,7 @@ export function TaskDialog({
                   onValueChange={(value: "LOW" | "MEDIUM" | "HIGH") =>
                     setFormData({ ...formData, priority: value })
                   }
+                  disabled={isSubmitting}
                 >
                   <SelectTrigger id="priority">
                     <SelectValue />
@@ -117,7 +213,7 @@ export function TaskDialog({
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="due_date">Due Date</Label>
+                <Label htmlFor="due_date">Due Date *</Label>
                 <Input
                   id="due_date"
                   type="date"
@@ -125,7 +221,16 @@ export function TaskDialog({
                   onChange={(e) =>
                     setFormData({ ...formData, due_date: e.target.value })
                   }
+                  min={todayIso || undefined}
+                  required
+                  disabled={isSubmitting}
+                  aria-invalid={!!fieldErrors.due_date}
                 />
+                {fieldErrors.due_date ? (
+                  <p className="text-sm text-destructive">
+                    {fieldErrors.due_date}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
@@ -135,11 +240,21 @@ export function TaskDialog({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
             >
               Cancel
             </Button>
-            <Button type="submit">
-              {task ? "Update Task" : "Create Task"}
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              {task
+                ? isSubmitting
+                  ? "Saving…"
+                  : "Update Task"
+                : isSubmitting
+                  ? "Saving…"
+                  : "Create Task"}
             </Button>
           </DialogFooter>
         </form>

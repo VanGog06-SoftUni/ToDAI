@@ -23,13 +23,12 @@ export function TaskList() {
   }, []);
 
   const handleCreateTask = (data: CreateTaskDTO) => {
-    createTask(data);
+    return createTask(data);
   };
 
   const handleUpdateTask = (data: UpdateTaskDTO) => {
-    if (editingTask) {
-      updateTask(editingTask.id, data);
-    }
+    if (!editingTask) return Promise.resolve();
+    return updateTask(editingTask.id, data);
   };
 
   const handleEdit = (task: Task) => {

@@ -4,19 +4,26 @@ const API_URL = "http://localhost:3001/api";
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  payload?: unknown;
+  constructor(status: number, message: string, payload?: unknown) {
     super(message);
     this.status = status;
+    this.payload = payload;
     this.name = "ApiError";
   }
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const error = await response
+    const payload = await response
       .json()
       .catch(() => ({ error: "Unknown error" }));
-    throw new ApiError(response.status, error.error || "Request failed");
+    const message =
+      (payload && typeof payload === "object" && "error" in payload
+        ? (payload as any).error
+        : undefined) || "Request failed";
+
+    throw new ApiError(response.status, message, payload);
   }
 
   if (response.status === 204) {
